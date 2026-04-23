@@ -25,22 +25,21 @@
   </style>
 </head>
 <body>
-  <h1>They would love to see your idea</h1>
+  <h1>Who would love to see your idea?</h1>
   <p class="muted">
-    Henkilöiden embeddaukset on esilaskettu GitHub Actionsissa tiedostoon <code>embeddings.json</code>.
-    Selaimessa lasketaan idean embedding ja etsitään parhaat osumat.
+    This page takes your idea as an input and compares it to a description of company employee using vector logic. The list contains only publicly available person descriptions in this demo version. 
   </p>
 
   <div class="card">
     <div class="row">
-      <button id="loadBtn">Lataa data + malli</button>
-      <span class="pill" id="dbInfo">Data: ei ladattu</span>
-      <span class="pill" id="modelInfo">Malli: ei ladattu</span>
+      <button id="loadBtn">Load data and AI model</button>
+      <span class="pill" id="dbInfo">Data: not loaded</span>
+      <span class="pill" id="modelInfo">Malli: not loaded</span>
       <span class="muted" id="status"></span>
     </div>
 
-    <label class="muted" for="idea">Idea / haku:</label>
-    <textarea id="idea" placeholder="Kirjoita idea tähän..."></textarea>
+    <label class="muted" for="idea">Idea / search:</label>
+    <textarea id="idea" placeholder="Write your idea here..."></textarea>
 
     <div class="row">
       <label>Top K:
@@ -48,15 +47,15 @@
       </label>
       <label class="small">
         <input id="truncate" type="checkbox" checked />
-        Lyhennä kuvaukset
+        Short descriptions (max 260 characters)
       </label>
-      <button id="searchBtn" disabled>Hae</button>
-      <button id="clearBtn">Tyhjennä</button>
+      <button id="searchBtn" disabled>Search</button>
+      <button id="clearBtn">clear</button>
     </div>
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0;">Tulokset</h3>
+    <h3 style="margin-top:0;">Results</h3>
     <ol id="results"></ol>
   </div>
 
