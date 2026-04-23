@@ -20,15 +20,14 @@
   </style>
 </head>
 <body>
-  <h1>Talent match (B-malli)</h1>
+  <h1>Show your idea to the right professional</h1>
   <p class="muted">
-    Henkilöiden embeddaukset on esilaskettu GitHub Actionsissa tiedostoon <code>embeddings.json</code>.
-    Selaimessa lasketaan vain idean embedding ja etsitään parhaat osumat.
+    Write your idea description to the field below and press "Find match". For the first time this will take some time. 
   </p>
 
   <div class="card">
     <div class="row">
-      <button id="loadBtn">Lataa data + malli</button>
+      <button id="loadBtn">Find match</button>
       <span class="pill" id="dbInfo">Data: ei ladattu</span>
       <span class="pill" id="modelInfo">Malli: ei ladattu</span>
       <span class="muted" id="status"></span>
@@ -89,14 +88,14 @@
         throw new Error("embeddings.json näyttää tyhjältä tai väärän muotoiselta.");
       }
 
-      dbInfoEl.textContent = `Data: ${db.count ?? db.items.length} hlö, dim=${db.dim ?? "?"}`;
+      dbInfoEl.textContent = `Data: ${db.count ?? db.items.length} prs, dim=${db.dim ?? "?"}`;
 
       setStatus("Ladataan malli selaimeen (ensimmäisellä kerralla voi kestää)…");
       // ONNX-malli selaimeen, sama MiniLM-perhe kuin pythonissa
       extractor = await pipeline("feature-extraction", "onnx-community/all-MiniLM-L6-v2-ONNX");
 
-      modelInfoEl.textContent = "Malli: ladattu";
-      setStatus("Valmis ✅");
+      modelInfoEl.textContent = "model: loaded";
+      setStatus("Ready ✅");
       searchBtn.disabled = false;
     }
 
