@@ -116,8 +116,8 @@
       setStatus("Ladataan malli selaimeen (ensimmäisellä kerralla voi kestää)…");
       extractor = await pipeline("feature-extraction", "onnx-community/all-MiniLM-L6-v2-ONNX");
 
-      modelInfoEl.textContent = "Malli: ladattu";
-      setStatus("Valmis ✅");
+      modelInfoEl.textContent = "Model: loaded";
+      setStatus("Ready to look for lover <3");
       searchBtn.disabled = false;
     }
 
