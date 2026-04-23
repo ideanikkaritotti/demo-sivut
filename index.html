@@ -6,7 +6,7 @@
   <title>Talent match demo</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; max-width: 1000px; }
-    h1 { margin: 0 0 6px; }
+    h1 { margin: 0 0 8px; }
     .muted { color: #666; font-size: 14px; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
     textarea { width: 100%; min-height: 170px; padding: 10px; font-size: 14px; }
@@ -14,31 +14,41 @@
     button:disabled { opacity: .55; cursor: not-allowed; }
     input[type="number"] { width: 90px; padding: 6px; }
     .card { border: 1px solid #ddd; border-radius: 16px; padding: 14px; margin: 12px 0; }
-    ol { line-height: 1.7; }
+    ol { line-height: 1.7; padding-left: 22px; }
     code { background: #f4f4f4; padding: 2px 6px; border-radius: 8px; }
     .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; color: #444; }
+    .result-item { margin: 10px 0; }
+    .result-name { font-weight: 700; }
+    .result-score { font-variant-numeric: tabular-nums; }
+    .result-desc { color:#666; font-size:14px; margin-top:2px; white-space:pre-wrap; }
+    .small { font-size: 12px; color:#777; }
   </style>
 </head>
 <body>
-  <h1>Show your idea to the right professional</h1>
+  <h1>They would love to see your idea</h1>
   <p class="muted">
-    Write your idea description to the field below and press "Find match". For the first time this will take some time. 
+    Henkilöiden embeddaukset on esilaskettu GitHub Actionsissa tiedostoon <code>embeddings.json</code>.
+    Selaimessa lasketaan idean embedding ja etsitään parhaat osumat.
   </p>
 
   <div class="card">
     <div class="row">
-      <button id="loadBtn">Find match</button>
-      <span class="pill" id="dbInfo">Data: Not loaded</span>
-      <span class="pill" id="modelInfo">Model: Not loaded</span>
+      <button id="loadBtn">Lataa data + malli</button>
+      <span class="pill" id="dbInfo">Data: ei ladattu</span>
+      <span class="pill" id="modelInfo">Malli: ei ladattu</span>
       <span class="muted" id="status"></span>
     </div>
 
-    <label class="muted" for="idea">Idea / search:</label>
-    <textarea id="idea" placeholder="Write your idea here..."></textarea>
+    <label class="muted" for="idea">Idea / haku:</label>
+    <textarea id="idea" placeholder="Kirjoita idea tähän..."></textarea>
 
     <div class="row">
       <label>Top K:
-        <input id="topK" type="number" value="5" min="1" max="50">
+        <input id="topK" type="number" value="10" min="1" max="50">
+      </label>
+      <label class="small">
+        <input id="truncate" type="checkbox" checked />
+        Lyhennä kuvaukset
       </label>
       <button id="searchBtn" disabled>Hae</button>
       <button id="clearBtn">Tyhjennä</button>
@@ -46,7 +56,7 @@
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0;">They would love to see your idea</h3>
+    <h3 style="margin-top:0;">Tulokset</h3>
     <ol id="results"></ol>
   </div>
 
@@ -59,6 +69,7 @@
 
     const ideaEl = document.getElementById("idea");
     const topKEl = document.getElementById("topK");
+    const truncateEl = document.getElementById("truncate");
     const resultsEl = document.getElementById("results");
 
     const statusEl = document.getElementById("status");
@@ -70,12 +81,17 @@
 
     function setStatus(msg) { statusEl.textContent = msg; }
 
-    // embeddings ovat normalisoitu (normalize_embeddings=True pythonissa)
+    // embeddings ovat normalisoitu pythonissa (normalize_embeddings=True)
     // -> cosine similarity = dot product
     function dot(a, b) {
       let s = 0;
       for (let i = 0; i < a.length; i++) s += a[i] * b[i];
       return s;
+    }
+
+    function truncate(text, n = 220) {
+      if (!text) return "";
+      return text.length > n ? text.slice(0, n) + "…" : text;
     }
 
     async function loadAll() {
@@ -88,14 +104,21 @@
         throw new Error("embeddings.json näyttää tyhjältä tai väärän muotoiselta.");
       }
 
-      dbInfoEl.textContent = `Data: ${db.count ?? db.items.length} prs, dim=${db.dim ?? "?"}`;
+      const count = db.count ?? db.items.length;
+      const dim = db.dim ?? (db.items[0]?.emb?.length ?? "?");
+      dbInfoEl.textContent = `Data: ${count} hlö, dim=${dim}`;
+
+      // Tarkistus: onko kuvaus mukana
+      const hasDesc = typeof db.items[0]?.kuvaus === "string";
+      if (!hasDesc) {
+        setStatus("Huom: embeddings.json ei sisällä 'kuvaus'-kenttää vielä. Päivitä build_embeddings.py niin, että se kirjoittaa myös kuvaukset.");
+      }
 
       setStatus("Ladataan malli selaimeen (ensimmäisellä kerralla voi kestää)…");
-      // ONNX-malli selaimeen, sama MiniLM-perhe kuin pythonissa
       extractor = await pipeline("feature-extraction", "onnx-community/all-MiniLM-L6-v2-ONNX");
 
-      modelInfoEl.textContent = "model: loaded";
-      setStatus("Ready ✅");
+      modelInfoEl.textContent = "Malli: ladattu";
+      setStatus("Valmis ✅");
       searchBtn.disabled = false;
     }
 
@@ -104,31 +127,46 @@
       return out.data; // Float32Array
     }
 
+    function renderResults(scored) {
+      resultsEl.innerHTML = "";
+
+      const shouldTruncate = truncateEl.checked;
+
+      scored.forEach((r, idx) => {
+        const li = document.createElement("li");
+        li.className = "result-item";
+        const desc = shouldTruncate ? truncate(r.kuvaus, 260) : (r.kuvaus ?? "");
+
+        li.innerHTML = `
+          <div>
+            <span class="result-name">${r.nimi}</span>:
+            <span class="result-score">${r.score.toFixed(3)}</span>
+          </div>
+          <div class="result-desc">${desc}</div>
+        `;
+        resultsEl.appendChild(li);
+      });
+    }
+
     async function search() {
       const idea = ideaEl.value.trim();
       if (!idea) return setStatus("Kirjoita idea ensin.");
 
-      const topK = Math.max(1, Math.min(50, parseInt(topKEl.value || "5", 10)));
+      const topK = Math.max(1, Math.min(50, parseInt(topKEl.value || "10", 10)));
 
       setStatus("Lasketaan idean embedding ja etsitään…");
-      resultsEl.innerHTML = "";
 
       const q = await embedQuery(idea);
 
       const scored = db.items.map(it => ({
         nimi: it.nimi,
+        kuvaus: it.kuvaus,   // <- tämä tulee embeddings.json:stä
         score: dot(q, it.emb)
       }));
 
       scored.sort((a, b) => b.score - a.score);
 
-      const top = scored.slice(0, topK);
-      for (const r of top) {
-        const li = document.createElement("li");
-        li.textContent = `${r.nimi}: ${r.score.toFixed(3)}`;
-        resultsEl.appendChild(li);
-      }
-
+      renderResults(scored.slice(0, topK));
       setStatus("Valmis ✅");
     }
 
