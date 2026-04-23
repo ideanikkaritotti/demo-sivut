@@ -1,22 +1,168 @@
+
 <!doctype html>
 <html lang="fi">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mun demo</title>
+  <title>Talent match demo</title>
   <style>
-    body { font-family: system-ui, Arial; margin: 40px; }
-    .card { padding: 20px; border: 1px solid #ddd; border-radius: 12px; max-width: 520px; }
-    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #aaa; cursor: pointer; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; max-width: 1000px; }
+    h1 { margin: 0 0 6px; }
+    .muted { color: #666; font-size: 14px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+    textarea { width: 100%; min-height: 170px; padding: 10px; font-size: 14px; }
+    button { padding: 10px 14px; border-radius: 12px; border: 1px solid #aaa; cursor: pointer; background: #fff; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    input[type="number"] { width: 90px; padding: 6px; }
+    .card { border: 1px solid #ddd; border-radius: 16px; padding: 14px; margin: 12px 0; }
+    ol { line-height: 1.7; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 8px; }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; color: #444; }
   </style>
 </head>
 <body>
+  <h1>Talent match (B-malli)</h1>
+  <p class="muted">
+    Henkilöiden embeddaukset on esilaskettu GitHub Actionsissa tiedostoon <code>embeddings.json</code>.
+    Selaimessa lasketaan vain idean embedding ja etsitään parhaat osumat.
+  </p>
+
   <div class="card">
-    <h1>Hei! Tämä on mun GitHub Pages -demo 👋</h1>
-    <p id="msg">Klikkaa nappia.</p>
-    <button onclick="document.getElementById('msg').textContent='Toimii! 🚀'">
-      Testaa
-    </button>
+    <div class="row">
+      <button id="loadBtn">Lataa data + malli</button>
+      <span class="pill" id="dbInfo">Data: ei ladattu</span>
+      <span class="pill" id="modelInfo">Malli: ei ladattu</span>
+      <span class="muted" id="status"></span>
+    </div>
+
+    <label class="muted" for="idea">Idea / haku:</label>
+    <textarea id="idea" placeholder="Kirjoita idea tähän..."></textarea>
+
+    <div class="row">
+      <label>Top K:
+        <input id="topK" type="number" value="5" min="1" max="50">
+      </label>
+      <button id="searchBtn" disabled>Hae</button>
+      <button id="clearBtn">Tyhjennä</button>
+    </div>
   </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Tulokset</h3>
+    <ol id="results"></ol>
+  </div>
+
+  <script type="module">
+    import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
+
+    const loadBtn = document.getElementById("loadBtn");
+    const searchBtn = document.getElementById("searchBtn");
+    const clearBtn = document.getElementById("clearBtn");
+
+    const ideaEl = document.getElementById("idea");
+    const topKEl = document.getElementById("topK");
+    const resultsEl = document.getElementById("results");
+
+    const statusEl = document.getElementById("status");
+    const dbInfoEl = document.getElementById("dbInfo");
+    const modelInfoEl = document.getElementById("modelInfo");
+
+    let db = null;        // embeddings.json payload
+    let extractor = null; // transformers.js pipeline
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    // embeddings ovat normalisoitu (normalize_embeddings=True pythonissa)
+    // -> cosine similarity = dot product
+    function dot(a, b) {
+      let s = 0;
+      for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+      return s;
+    }
+
+    async function loadAll() {
+      setStatus("Ladataan embeddings.json…");
+      const res = await fetch("./embeddings.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`embeddings.json lataus epäonnistui (HTTP ${res.status})`);
+      db = await res.json();
+
+      if (!db?.items?.length) {
+        throw new Error("embeddings.json näyttää tyhjältä tai väärän muotoiselta.");
+      }
+
+      dbInfoEl.textContent = `Data: ${db.count ?? db.items.length} hlö, dim=${db.dim ?? "?"}`;
+
+      setStatus("Ladataan malli selaimeen (ensimmäisellä kerralla voi kestää)…");
+      // ONNX-malli selaimeen, sama MiniLM-perhe kuin pythonissa
+      extractor = await pipeline("feature-extraction", "onnx-community/all-MiniLM-L6-v2-ONNX");
+
+      modelInfoEl.textContent = "Malli: ladattu";
+      setStatus("Valmis ✅");
+      searchBtn.disabled = false;
+    }
+
+    async function embedQuery(text) {
+      const out = await extractor(text, { pooling: "mean", normalize: true });
+      return out.data; // Float32Array
+    }
+
+    async function search() {
+      const idea = ideaEl.value.trim();
+      if (!idea) return setStatus("Kirjoita idea ensin.");
+
+      const topK = Math.max(1, Math.min(50, parseInt(topKEl.value || "5", 10)));
+
+      setStatus("Lasketaan idean embedding ja etsitään…");
+      resultsEl.innerHTML = "";
+
+      const q = await embedQuery(idea);
+
+      const scored = db.items.map(it => ({
+        nimi: it.nimi,
+        score: dot(q, it.emb)
+      }));
+
+      scored.sort((a, b) => b.score - a.score);
+
+      const top = scored.slice(0, topK);
+      for (const r of top) {
+        const li = document.createElement("li");
+        li.textContent = `${r.nimi}: ${r.score.toFixed(3)}`;
+        resultsEl.appendChild(li);
+      }
+
+      setStatus("Valmis ✅");
+    }
+
+    loadBtn.addEventListener("click", async () => {
+      loadBtn.disabled = true;
+      try {
+        await loadAll();
+      } catch (e) {
+        setStatus(`Virhe: ${e.message}`);
+        console.error(e);
+      } finally {
+        loadBtn.disabled = false;
+      }
+    });
+
+    searchBtn.addEventListener("click", async () => {
+      searchBtn.disabled = true;
+      try {
+        await search();
+      } catch (e) {
+        setStatus(`Virhe: ${e.message}`);
+        console.error(e);
+      } finally {
+        searchBtn.disabled = false;
+      }
+    });
+
+    clearBtn.addEventListener("click", () => {
+      ideaEl.value = "";
+      resultsEl.innerHTML = "";
+      setStatus("");
+    });
+  </script>
 </body>
 </html>
