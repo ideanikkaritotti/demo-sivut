@@ -27,7 +27,7 @@
 <body>
   <h1>Who would love to see your idea?</h1>
   <p class="muted">
-    This page takes your idea as an input and compares it to a description of company employee using vector logic. The list contains only publicly available person descriptions in this demo version. 
+    Idea tinder takes your idea as an input and compares it to a description of company employee using vector logic. The list contains only publicly available person descriptions in this demo version. 
   </p>
 
   <div class="card">
@@ -113,7 +113,7 @@
         setStatus("Huom: embeddings.json ei sisällä 'kuvaus'-kenttää vielä. Päivitä build_embeddings.py niin, että se kirjoittaa myös kuvaukset.");
       }
 
-      setStatus("Ladataan malli selaimeen (ensimmäisellä kerralla voi kestää)…");
+      setStatus("Loading model. Wait for couple seconds...");
       extractor = await pipeline("feature-extraction", "onnx-community/all-MiniLM-L6-v2-ONNX");
 
       modelInfoEl.textContent = "Model: loaded";
